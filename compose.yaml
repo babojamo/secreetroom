@@ -1,0 +1,22 @@
+# Uses your Supabase project for Postgres and Auth.
+services:
+  migrate:
+    build:
+      context: .
+      target: builder
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DEMO_SEED: 'false'
+    command: sh -c "npm run db:migrate && npm run db:seed"
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

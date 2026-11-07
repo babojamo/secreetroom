@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Guild {
+  id       String           @id @default(cuid())
+  name     String           @default("STOICS")
+  settings Json             @default("{}")
+  revision Int              @default(0)
+  users    User[]
+  members  Member[]
+  classes  CharacterClass[]
+  events   Event[]
+  audits   AuditLog[]
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  /// Preserved for legacy backups only; authentication uses Supabase exclusively.
+  passwordHash String?
+  authUserId   String?    @unique @db.Uuid
+  role         String     @default("VIEWER")
+  guildId      String
+  guild        Guild      @relation(fields: [guildId], references: [id])
+  audits       AuditLog[]
+}
+
+model CharacterClass {
+  id      String  @id @default(cuid())
+  name    String
+  icon    String?
+  guildId String
+  guild   Guild   @relation(fields: [guildId], references: [id])
+
+  @@unique([guildId, name])
+}
+
+model Member {
+  id             String           @id @default(cuid())
+  guildId        String
+  guild          Guild            @relation(fields: [guildId], references: [id])
+  name           String
+  normalizedName String
+  job            String
+  level          Int
+  primaryRole    String
+  status         String           @default("ACTIVE")
+  highDps        Boolean          @default(false)
+  highAoe        Boolean          @default(false)
+  core           Boolean          @default(false)
+  available      Boolean          @default(true)
+  equipment      String           @default("")
+  notes          String           @default("")
+  createdAt      DateTime         @default(now())
+  roles          RoleCapability[]
+  ratings        Rating?
+  availability   Availability[]
+  assignments    Assignment[]
+  attendance     Attendance[]
+
+  @@unique([guildId, normalizedName])
+  @@index([guildId, status])
+}
+
+model RoleCapability {
+  memberId String
+  role     String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, role])
+}
+
+model Rating {
+  memberId String @id
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  dps      Int    @default(5)
+  aoe      Int    @default(5)
+  tank     Int    @default(5)
+  support  Int    @default(5)
+}
+
+model Availability {
+  id        String  @id @default(cuid())
+  memberId  String
+  member    Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  runId     String
+  run       Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  available Boolean
+
+  @@unique([memberId, runId])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  guildId     String
+  guild       Guild    @relation(fields: [guildId], references: [id])
+  scheduledAt DateTime
+  runs        Run[]
+
+  @@index([guildId, scheduledAt])
+}
+
+model Run {
+  id           String          @id @default(cuid())
+  eventId      String
+  event        Event           @relation(fields: [eventId], references: [id])
+  group        String
+  status       String          @default("DRAFT")
+  target       Int             @default(24)
+  allowOverlap Boolean         @default(false)
+  exclusions   String[]        @default([])
+  duration     Int?
+  ranking      Int?
+  drops        String          @default("")
+  notes        String          @default("")
+  finalizedAt  DateTime?
+  parties      Party[]
+  attendance   Attendance[]
+  availability Availability[]
+  versions     RosterVersion[]
+  analyses     Analysis[]
+  assignments  Assignment[]
+
+  @@unique([eventId, group])
+}
+
+model Party {
+  id          String       @id @default(cuid())
+  runId       String
+  run         Run          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  number      Int
+  assignments Assignment[]
+
+  @@unique([runId, number])
+}
+
+model Assignment {
+  id       String  @id @default(cuid())
+  runId    String
+  run      Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  partyId  String
+  party    Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  memberId String
+  member   Member  @relation(fields: [memberId], references: [id])
+  slot     Int
+  role     String
+  locked   Boolean @default(false)
+  snapshot Json
+
+  @@unique([partyId, slot])
+  @@unique([partyId, memberId])
+  @@unique([runId, memberId])
+}
+
+model Attendance {
+  id       String  @id @default(cuid())
+  runId    String
+  run      Run     @relation(fields: [runId], references: [id])
+  memberId String
+  member   Member  @relation(fields: [memberId], references: [id])
+  present  Boolean
+  party    Int
+  role     String
+  snapshot Json
+
+  @@unique([runId, memberId])
+}
+
+model RosterVersion {
+  id          String   @id @default(cuid())
+  runId       String
+  run         Run      @relation(fields: [runId], references: [id])
+  createdAt   DateTime @default(now())
+  actorId     String
+  assignments Json
+}
+
+model Analysis {
+  id        String   @id @default(cuid())
+  runId     String
+  run       Run      @relation(fields: [runId], references: [id])
+  createdAt DateTime @default(now())
+  actorId   String
+  prompt    String
+  response  Json
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  guildId   String
+  guild     Guild    @relation(fields: [guildId], references: [id])
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+}
